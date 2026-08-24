@@ -1,0 +1,6 @@
+interface:
+  display_name: "法学引注自动格式化"
+  short_description: "按中国法学引注规范格式化论文脚注和参考文献"
+  default_prompt: "Use $verify-and-format-legal-citations to format the footnotes and references in this finalized legal-academic DOCX."
+policy:
+  allow_implicit_invocation: true
