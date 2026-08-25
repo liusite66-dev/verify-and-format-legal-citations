@@ -84,6 +84,30 @@ class CitationCoreTests(unittest.TestCase):
         article = classify_and_parse("x", "脚注", "3", "赵虚构. (2029). 算法平台责任的月球法解释. 火星法学, 12(4), 1-9.")
         self.assertIn("载《火星法学》", article.normalized)
 
+    def test_gbt_journal_entry_extracts_all_fields(self):
+        entry = classify_and_parse(
+            "x", "脚注", "1",
+            "[1]王洪雨,张晓云.新文科建设背景下法学理论与实践教学的关系辨正与融合路径[J].教育探索,2026,(8):30-35.",
+        )
+        self.assertEqual(entry.citation_type, "zh_journal_article")
+        self.assertEqual(entry.authors, ["王洪雨", "张晓云"])
+        self.assertEqual(entry.title, "新文科建设背景下法学理论与实践教学的关系辨正与融合路径")
+        self.assertEqual(entry.container, "教育探索")
+        self.assertEqual(entry.year, "2026")
+        self.assertEqual(entry.issue, "8")
+        self.assertEqual(entry.pages, "30-35")
+        self.assertEqual(entry.format_status, "已格式化")
+        self.assertIn("载《教育探索》", entry.normalized)
+
+    def test_gbt_journal_doi_is_not_mixed_into_author(self):
+        entry = classify_and_parse(
+            "x", "脚注", "1",
+            "张三,李四.数据治理研究[J].法学研究,2024,(3):12-20,DOI:10.1234/abc.",
+        )
+        self.assertEqual(entry.authors, ["张三", "李四"])
+        self.assertEqual(entry.doi, "10.1234/abc")
+        self.assertNotIn("10.1234", entry.authors[0])
+
     def test_incomplete_citation_is_preserved_and_reports_missing_fields(self):
         original = "赵某：《数据法研究》，载《法学》2024年。"
         entry = classify_and_parse("footnote:1", "脚注", "1", original)
