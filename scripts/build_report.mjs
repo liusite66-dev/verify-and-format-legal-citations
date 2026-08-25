@@ -48,21 +48,21 @@ summary.getRange("A1:F18").format.autofitRows();
 summary.getRange("A:A").format.columnWidth = 18;
 summary.getRange("B:F").format.columnWidth = 20;
 
-const headers = ["条目ID", "位置", "编号", "原始文本", "规范化文本", "文献类型", "适用规则", "作者", "题名", "期刊/出版社", "年份", "卷期/页码", "处理状态", "缺失字段", "自动修改", "待人工处理"];
-detail.getRange("A1:P1").values = [headers];
+const headers = ["条目ID", "位置", "编号", "原始文本", "规范化文本", "文献类型", "适用规则", "作者", "题名", "期刊/出版社", "年份", "卷期/页码", "处理状态", "缺失字段", "自动修改", "待人工处理", "解析方式", "解析置信度"];
+detail.getRange("A1:R1").values = [headers];
 const rows = entries.map(e => [
   e.entry_id || "", e.location || "", e.number || "", e.original || "", e.normalized || "",
   e.citation_type || "", (e.rule_numbers || []).join(", "), (e.authors || []).join("、"),
   e.title || "", e.container || e.publisher || "", e.year || "",
   [e.volume ? `卷${e.volume}` : "", e.issue ? `期${e.issue}` : "", e.pages ? `页${e.pages}` : ""].filter(Boolean).join("；"),
-  e.format_status || "", (e.missing_fields || []).join("、"), e.auto_changes || "", e.review_note || "",
+  e.format_status || "", (e.missing_fields || []).join("、"), e.auto_changes || "", e.review_note || "", e.parse_method || "规则解析", e.parse_confidence ?? 1,
 ]);
 if (rows.length) detail.getRangeByIndexes(1, 0, rows.length, headers.length).values = rows;
-detail.getRange("A1:P1").format = { fill: "#17365D", font: { bold: true, color: "#FFFFFF" }, wrapText: true };
+detail.getRange("A1:R1").format = { fill: "#17365D", font: { bold: true, color: "#FFFFFF" }, wrapText: true };
 detail.freezePanes.freezeRows(1);
 detail.freezePanes.freezeColumns(3);
-detail.getRange(`A1:P${Math.max(2, rows.length + 1)}`).format.font = { name: "Arial", size: 10 };
-detail.getRange(`D2:P${Math.max(2, rows.length + 1)}`).format.wrapText = true;
+detail.getRange(`A1:R${Math.max(2, rows.length + 1)}`).format.font = { name: "Arial", size: 10 };
+detail.getRange(`D2:R${Math.max(2, rows.length + 1)}`).format.wrapText = true;
 detail.getRange("A:A").format.columnWidth = 16;
 detail.getRange("B:C").format.columnWidth = 10;
 detail.getRange("D:E").format.columnWidth = 42;
