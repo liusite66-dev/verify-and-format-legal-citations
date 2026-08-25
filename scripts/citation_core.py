@@ -28,6 +28,8 @@ class CitationEntry:
     missing_fields: list[str] = field(default_factory=list)
     auto_changes: str = ""
     review_note: str = ""
+    parse_method: str = "规则解析"
+    parse_confidence: float = 1.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -238,6 +240,41 @@ def classify_and_parse(entry_id: str, location: str, number: str, text: str) -> 
                 e.title = case_name.group(1).strip()
     finalize_format_decision(e)
     return e
+
+
+def apply_model_fields(entry: CitationEntry, fields: dict, confidence: float = 0.0) -> CitationEntry:
+    """Apply an Agent/model-produced field map after deterministic parsing fails.
+
+    The model must provide only values visible in the citation. This function
+    never searches the Internet or invents missing metadata; it records the
+    assisted path so the XLSX report can require human review.
+    """
+    allowed = {"citation_type", "authors", "title", "container", "publisher",
+               "year", "volume", "issue", "pages", "doi", "identifier"}
+    for key, value in fields.items():
+        if key in allowed and value not in (None, ""):
+            if key == "authors" and isinstance(value, str):
+                value = [x.strip() for x in re.split(r"[,，、;；]", value) if x.strip()]
+            setattr(entry, key, value)
+    entry.parse_method = "模型辅助解析"
+    entry.parse_confidence = float(confidence or 0)
+    entry.review_note = (entry.review_note + "；" if entry.review_note else "") + "字段由模型辅助识别，未核验书目信息真实性"
+    if entry.citation_type in ("zh_journal_article", "foreign_source"):
+        authors = "、".join(entry.authors)
+        if entry.citation_type == "zh_journal_article":
+            period = f"{entry.year}年第{entry.issue}期" if entry.issue else f"{entry.year}年"
+            entry.normalized = f"{authors}：《{entry.title}》，载《{entry.container}》{period}"
+            if entry.pages: entry.normalized += f"，第{entry.pages}页"
+            if entry.doi: entry.normalized += f"，DOI：{entry.doi}"
+            entry.normalized += "。"
+        else:
+            entry.normalized = entry.original
+    elif entry.citation_type == "zh_book_or_chapter":
+        entry.normalized = f"{'、'.join(entry.authors)}：《{entry.title}》，{entry.publisher}{entry.year}年版。"
+    finalize_format_decision(entry)
+    entry.parse_method = "模型辅助解析"
+    entry.parse_confidence = float(confidence or 0)
+    return entry
 
 
 REQUIRED_FIELDS = {
