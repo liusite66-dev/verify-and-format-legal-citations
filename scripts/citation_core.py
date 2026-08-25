@@ -58,6 +58,30 @@ EN_APA_RE = re.compile(
     re.I,
 )
 
+# GB/T 7714 entries are common in imported theses.  Parse the type marker
+# before applying the Manual's output template; punctuation around the marker
+# is intentionally permissive because Word exports often use full-width forms.
+GBT_JOURNAL_RE = re.compile(
+    r"^(?:\[\d+\]\s*)?(?P<authors>.+?)\.\s*(?P<title>.+?)\[J\]\s*[.。]\s*"
+    r"(?P<journal>[^,，.。]+?)\s*[,，]\s*(?P<year>(?:18|19|20)\d{2})\s*"
+    r"(?:[,，]\s*(?:第\s*)?(?P<volume>\d+)\s*卷?\s*(?:第\s*)?(?P<issue>\d+)\s*期?|"
+    r"[,，]\s*\((?P<issue_paren>\d+)\))?\s*"
+    r"(?:[:：]\s*(?P<pages>\d+(?:\s*[-—–－至]\s*\d+)?))?\s*"
+    r"(?:[,，]\s*(?:DOI\s*[:：]?\s*)?(?P<doi>10\.\d{4,9}/[-._;()/:A-Z0-9]+))?\s*[.。]? $",
+    re.I | re.X,
+)
+GBT_THESIS_RE = re.compile(
+    r"^(?:\[\d+\]\s*)?(?P<authors>.+?)\.\s*(?P<title>.+?)\[D\]\s*[.。]\s*"
+    r"(?P<school>[^,，.。]+?)\s*[,，]\s*(?P<year>(?:18|19|20)\d{2})\s*[.。]?$",
+    re.I | re.X,
+)
+GBT_BOOK_RE2 = re.compile(
+    r"^(?:\[\d+\]\s*)?(?P<authors>.+?)\.\s*(?P<title>.+?)\[M\]\s*[.。]\s*"
+    r"(?:(?P<city>[^:：,，.。]+)\s*[:：])?\s*(?P<publisher>[^,，.。]+?)\s*[,，]\s*"
+    r"(?P<year>(?:18|19|20)\d{2})\s*(?:年\s*版)?(?:\s*[,，:]\s*(?P<pages>\d+(?:[-—–－至]\d+)?))?\s*[.。]? $",
+    re.I | re.X,
+)
+
 
 def normalize_typography(text: str) -> tuple[str, list[str]]:
     """Apply only low-risk typography changes; never invent metadata."""
@@ -74,6 +98,46 @@ def normalize_typography(text: str) -> tuple[str, list[str]]:
 def _convert_external_style(e: CitationEntry, text: str) -> bool:
     """Convert a small set of deterministic GB/T 7714 and APA layouts."""
     value = unicodedata.normalize("NFKC", text).strip()
+    match = GBT_JOURNAL_RE.match(value)
+    if match:
+        g = match.groupdict()
+        authors = re.split(r"\s*(?:,|，|、|;|；)\s*", g["authors"].strip())
+        authors = [a.strip() for a in authors if a.strip()]
+        issue = g.get("issue") or g.get("issue_paren") or ""
+        pages = (g.get("pages") or "").replace(" ", "").replace("—", "-").replace("–", "-").replace("－", "-").replace("至", "-")
+        e.citation_type, e.rule_numbers = "zh_journal_article", [24, 43]
+        e.authors, e.title, e.container, e.year = authors, g["title"].strip(), g["journal"].strip(), g["year"]
+        e.volume, e.issue, e.pages, e.doi = g.get("volume") or "", issue, pages, (g.get("doi") or "").rstrip(".,;，。；")
+        if e.volume:
+            journal_part = f"{e.year}年第{e.volume}卷第{e.issue}期"
+        else:
+            journal_part = f"{e.year}年第{e.issue}期"
+        e.normalized = f"{'、'.join(authors)}：《{e.title}》，载《{e.container}》{journal_part}"
+        if pages:
+            e.normalized += f"，第{pages}页"
+        if e.doi:
+            e.normalized += f"，DOI：{e.doi}"
+        e.normalized += "。"
+        e.auto_changes = "GB/T 7714期刊文章格式转换为法学引注格式"
+        return True
+    match = GBT_THESIS_RE.match(value)
+    if match:
+        g = match.groupdict(); authors = [x.strip() for x in re.split(r"\s*(?:,|，|、|;|；)\s*", g["authors"]) if x.strip()]
+        e.citation_type, e.rule_numbers = "zh_thesis", [24, 40]
+        e.authors, e.title, e.container, e.year = authors, g["title"].strip(), g["school"].strip(), g["year"]
+        e.normalized = f"{'、'.join(authors)}：《{e.title}》，{e.container}{e.year}年学位论文。"
+        e.auto_changes = "GB/T 7714学位论文格式转换为法学引注格式"
+        return True
+    match = GBT_BOOK_RE2.match(value)
+    if match:
+        g = match.groupdict(); authors = [x.strip() for x in re.split(r"\s*(?:,|，|、|;|；)\s*", g["authors"]) if x.strip()]
+        e.citation_type, e.rule_numbers = "zh_book_or_chapter", [24, 25]
+        e.authors, e.title, e.publisher, e.year, e.pages = authors, g["title"].strip(), g["publisher"].strip(), g["year"], (g.get("pages") or "").replace(" ", "")
+        e.normalized = f"{'、'.join(authors)}：《{e.title}》，{e.publisher}{e.year}年版"
+        if e.pages: e.normalized += f"，第{e.pages.replace('至', '-')}页"
+        e.normalized += "。"
+        e.auto_changes = "GB/T 7714专著格式转换为法学引注格式"
+        return True
     match = GBT_BOOK_RE.match(value)
     if match:
         author, title, publisher, year, pages = (x.strip() if x else "" for x in match.groups())
@@ -181,6 +245,8 @@ REQUIRED_FIELDS = {
                            ("year", "年份"), ("issue", "期号")),
     "zh_book_or_chapter": (("authors", "作者"), ("title", "书名/篇名"),
                            ("publisher", "出版社"), ("year", "出版年份")),
+    "zh_thesis": (("authors", "作者"), ("title", "篇名"), ("container", "学位授予单位"),
+                  ("year", "年份")),
     "foreign_source": (("authors", "作者"), ("title", "题名"),
                        ("container", "期刊/出版物"), ("year", "年份")),
     "legal_norm": (("title", "法律文件名称"),),
